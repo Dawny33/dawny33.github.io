@@ -55,7 +55,10 @@ git config user.email "jrajrohit33@gmail.com"
 ```
 
 First run builds a virtualenv and installs dependencies; after that it starts in a
-second. Open **http://127.0.0.1:8765** and:
+second. The terminal also prints a random per-run auth token — you don't need to do
+anything with it, the page reads it automatically, but it's there so that only this
+tool's own tab (not some other page open in your browser) can call its publish API;
+see [Security model](#security-model) below. Open **http://127.0.0.1:8765** and:
 
 1. **Drop in photos** of your notes — one or many. Multiple pages are treated as one
    continuous train of thought, in the order shown, so keep them in reading order
@@ -87,6 +90,19 @@ All optional, in `tools/notes2blog/.env`:
 
 The tool never publishes without an explicit click, and it reuses tags already present
 on the site rather than inventing near-duplicates.
+
+### Security model
+
+The server can commit and push to this repo, so it treats every request to its
+publish/transcribe endpoints as untrusted unless it can prove three things: the
+request's `Host` header names this exact `127.0.0.1:<port>` (or `localhost:<port>`)
+origin, its `Origin` header (when present — browsers always send one on these
+POSTs) matches too, and it carries the random token printed to the terminal on
+startup as an `X-Notes2Blog-Token` header. The page you open in your browser sets
+all of this up for you automatically. This exists because binding to `127.0.0.1`
+only keeps other machines out — it does nothing to stop a malicious page open in
+another tab from using a rebound DNS name to reach this server and fire off a
+publish while you're not looking. Don't share the printed token or the tool's URL.
 
 ---
 

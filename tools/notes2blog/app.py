@@ -15,6 +15,7 @@ import io
 import json
 import os
 import re
+import secrets
 import subprocess
 import unicodedata
 from pathlib import Path
@@ -24,7 +25,7 @@ import httpx
 import markdown as md
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
@@ -68,6 +69,48 @@ MAX_EDGE = 1568  # Anthropic's recommended max image edge
 _resolved_model: str | None = None
 
 app = FastAPI(title="notes2blog")
+
+# --------------------------------------------------------------------------
+# local-origin guard
+#
+# This process can commit and push to git and spend API credits, so any
+# browser reachable at all — including a page from an unrelated origin that
+# a malicious site DNS-rebinds to 127.0.0.1 — must not be able to drive it.
+# Binding uvicorn to 127.0.0.1 only keeps *other machines* out; it does
+# nothing against a same-machine browser tab making a fetch() here. Three
+# independent checks guard the mutating/expensive routes below: the Host
+# header must name this exact origin (defeats a rebound hostname), the
+# Origin header (browsers always send it on POST fetches, and can't be
+# spoofed by page script) must match too (defeats the case where the
+# attacker page fetches 127.0.0.1 directly by IP), and a random per-process
+# token — never exposed to any origin but this one's own served HTML — is
+# required as a header on every call, as a backstop if either header check
+# is ever bypassed.
+# --------------------------------------------------------------------------
+
+RUN_TOKEN = secrets.token_urlsafe(32)
+TOKEN_HEADER = "x-notes2blog-token"
+
+_PORT = os.getenv("PORT", "8765").strip()
+ALLOWED_HOSTS = {f"127.0.0.1:{_PORT}", f"localhost:{_PORT}"}
+ALLOWED_ORIGINS = {f"http://127.0.0.1:{_PORT}", f"http://localhost:{_PORT}"}
+GUARDED_PATHS = {"/api/publish", "/api/transcribe"}
+
+print(f"→ per-run auth token (the page injects this for you automatically): {RUN_TOKEN}")
+
+
+@app.middleware("http")
+async def guard_local_origin(request: Request, call_next):
+    if request.url.path in GUARDED_PATHS:
+        if request.headers.get("host", "") not in ALLOWED_HOSTS:
+            return JSONResponse({"detail": "Forbidden: unexpected Host header."}, status_code=403)
+        origin = request.headers.get("origin")
+        if origin is not None and origin not in ALLOWED_ORIGINS:
+            return JSONResponse({"detail": "Forbidden: unexpected Origin header."}, status_code=403)
+        token = request.headers.get(TOKEN_HEADER, "")
+        if not secrets.compare_digest(token, RUN_TOKEN):
+            return JSONResponse({"detail": "Forbidden: missing or invalid token."}, status_code=403)
+    return await call_next(request)
 
 
 # --------------------------------------------------------------------------
@@ -237,20 +280,25 @@ def extract_json(text: str) -> dict:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    start, depth = text.find("{"), 0
+    # Fall back to locating the first '{' and decoding from there. raw_decode
+    # respects JSON string quoting/escaping, so braces inside string values
+    # (a code block in the post body, "function() { }" in transcribed text)
+    # don't throw off where the object actually ends the way a naive
+    # brace-counting scan would.
+    start = text.find("{")
     if start == -1:
         raise HTTPException(502, f"Model did not return JSON:\n\n{text[:800]}")
-    for i in range(start, len(text)):
-        if text[i] == "{":
-            depth += 1
-        elif text[i] == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[start : i + 1])
-                except json.JSONDecodeError as e:
-                    raise HTTPException(502, f"Malformed JSON from model: {e}")
-    raise HTTPException(502, f"Truncated JSON from model:\n\n{text[:800]}")
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(text, start)
+        return obj
+    except json.JSONDecodeError as e:
+        # A response cut off mid-object either runs out of input right where
+        # the error is raised (pos lands at/near the end of the text) or ends
+        # inside an open string literal ("Unterminated string..."); anything
+        # else is JSON that's simply malformed, not just incomplete.
+        if e.msg.startswith("Unterminated string") or e.pos >= len(text) - 1:
+            raise HTTPException(502, f"Truncated JSON from model:\n\n{text[:800]}")
+        raise HTTPException(502, f"Malformed JSON from model: {e}")
 
 
 def git(*args: str) -> str:
@@ -284,7 +332,8 @@ def git(*args: str) -> str:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
-    return (HERE / "static" / "index.html").read_text(encoding="utf-8")
+    html = (HERE / "static" / "index.html").read_text(encoding="utf-8")
+    return html.replace("__NOTES2BLOG_TOKEN__", RUN_TOKEN)
 
 
 @app.get("/api/status")

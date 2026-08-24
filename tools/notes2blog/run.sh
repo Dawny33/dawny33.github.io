@@ -30,5 +30,6 @@ if [ ! -f .env ]; then
 fi
 
 PORT="${PORT:-8765}"
+export PORT
 echo "→ notes2blog running at http://127.0.0.1:${PORT}"
 exec .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port "$PORT" "$@"

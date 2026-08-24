@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>notes2blog</title>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>window.__N2B_TOKEN__ = "__NOTES2BLOG_TOKEN__";</script>
+<script src="/static/vendor/dompurify.min.js"></script>
 <style>
   :root {
     --bg:#14140f; --panel:#1b1a15; --panel2:#211f19; --fg:#e8e6df; --muted:#9a978d;
-    --faint:#6e6b63; --border:#2f2d26; --accent:#e08a5f; --accent-dim:#3a2a20;
+    --faint:#97948a; --border:#2f2d26; --accent:#e08a5f; --accent-dim:#3a2a20;
     --ok:#7bb37b; --err:#d2705e;
     --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;
     --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
@@ -133,7 +134,7 @@
   <div class="col left">
     <div class="step">
       <h2>1 · Photos of your notes</h2>
-      <div id="drop">
+      <div id="drop" tabindex="0" role="button" aria-label="Upload photos of your notes">
         <p class="big">Drop images here</p>
         <p>or click to choose files</p>
         <p class="hint">JPG / PNG / HEIC · multiple pages in reading order</p>
@@ -208,18 +209,20 @@
           <input type="checkbox" id="ow"> overwrite existing
         </label>
       </div>
-      <div class="msg" id="msg"></div>
+      <div class="msg" id="msg" role="status" aria-live="polite"></div>
     </div>
   </div>
 </main>
 
 <script>
 const $ = s => document.querySelector(s);
+const TOKEN = window.__N2B_TOKEN__ || '';
+function authHeaders(extra) { return Object.assign({'X-Notes2Blog-Token': TOKEN}, extra || {}); }
 let files = [], tags = [], known = [], draft = null;
 let thumbUrls = [];
 
 /* ---------- status ---------- */
-fetch('/api/status').then(r=>r.json()).then(s=>{
+fetch('/api/status', { headers: authHeaders() }).then(r=>r.json()).then(s=>{
   known = s.known_tags || [];
   const box = $('#status'); box.textContent = '';
   const b = document.createElement('b'); b.textContent = s.branch; box.append(b);
@@ -235,6 +238,9 @@ fetch('/api/status').then(r=>r.json()).then(s=>{
 /* ---------- upload ---------- */
 const drop = $('#drop'), fileIn = $('#file');
 drop.onclick = () => fileIn.click();
+drop.onkeydown = e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); }
+};
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files); };
@@ -256,6 +262,7 @@ function drawThumbs() {
     img.src = url;
     const n = document.createElement('div'); n.className = 'n'; n.textContent = i + 1;
     const x = document.createElement('button'); x.className = 'x'; x.textContent = '×';
+    x.setAttribute('aria-label', `Remove page ${i + 1}`);
     x.onclick = ev => { ev.stopPropagation(); files.splice(i, 1); drawThumbs(); };
     d.append(img, n, x); t.append(d);
   });
@@ -271,6 +278,7 @@ function drawTags() {
     const c = document.createElement('span'); c.className = 'chip';
     c.append(document.createTextNode(t));
     const b = document.createElement('button'); b.textContent = '×';
+    b.setAttribute('aria-label', `Remove tag ${t}`);
     b.onclick = () => { tags.splice(i, 1); drawTags(); };
     c.append(b); box.insertBefore(c, input);
   });
@@ -312,7 +320,7 @@ $('#go').onclick = async () => {
     const fd = new FormData();
     files.forEach(f => fd.append('files', f));
     fd.append('instructions', $('#instr').value);
-    const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+    const r = await fetch('/api/transcribe', { method: 'POST', headers: authHeaders(), body: fd });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || 'Transcription failed');
     draft = j;
@@ -351,7 +359,7 @@ function drawPreviewTags() {
 async function refresh() {
   const body = $('#body').value;
   const r = await fetch('/api/render', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
+    method: 'POST', headers: authHeaders({'Content-Type': 'application/json'}),
     body: JSON.stringify({ body })
   });
   const j = await r.json();
@@ -427,7 +435,7 @@ $('#approve').onclick = async () => {
   show('info', 'Writing the post, committing and pushing…');
   try {
     const r = await fetch('/api/publish', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: authHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({
         title: $('#title').value, slug: $('#slug').value, description: $('#desc').value,
         date: $('#date').value, tags, body: $('#body').value, overwrite: $('#ow').checked
@@ -435,6 +443,12 @@ $('#approve').onclick = async () => {
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || 'Publish failed');
+
+    if (j.committed === false) {
+      show('info', 'No changes — this post already matches what\'s on disk, nothing was committed.');
+      btn.disabled = false; btn.textContent = 'Nothing to publish';
+      return;
+    }
 
     const frag = document.createElement('span');
     const b = document.createElement('b'); b.textContent = 'Published.'; frag.append(b, document.createElement('br'));
