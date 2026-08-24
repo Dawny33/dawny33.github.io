@@ -1,10 +1,15 @@
-_site
-.DS_Store
-.jekyll
+_site/
+.sass-cache/
+.jekyll-cache/
 .jekyll-metadata
-.bundle
-.sass-cache
-Gemfile
+/vendor/
+.bundle/
 Gemfile.lock
-node_modules
-package.json
+
+# notes2blog tool
+tools/notes2blog/.venv/
+tools/notes2blog/uploads/
+tools/notes2blog/drafts/
+__pycache__/
+*.pyc
+.env
