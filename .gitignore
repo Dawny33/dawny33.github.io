@@ -6,10 +6,6 @@ _site/
 .bundle/
 Gemfile.lock
 
-# notes2blog tool
-tools/notes2blog/.venv/
-tools/notes2blog/uploads/
-tools/notes2blog/drafts/
 __pycache__/
 *.pyc
 .env
