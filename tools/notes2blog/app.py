@@ -75,11 +75,34 @@ app = FastAPI(title="notes2blog")
 # --------------------------------------------------------------------------
 
 
-def slugify(text: str) -> str:
+def slugify(text: Any) -> str:
+    text = str(text if text is not None else "")
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     text = re.sub(r"[^\w\s-]", "", text).strip().lower()
     text = re.sub(r"[\s_-]+", "-", text)
     return text.strip("-") or "untitled"
+
+
+def coerce_tags(raw: Any, limit: int | None = None) -> list[str]:
+    """Normalise an untrusted 'tags' value into a deduped slug list.
+
+    Both the model's JSON and the browser payload land here, so a bare string
+    must become one tag rather than iterating into one tag per character, and
+    any non-list shape degrades to no tags instead of raising. `limit` caps the
+    model's suggestions; the user's own edited list is left uncapped.
+    """
+    if isinstance(raw, str):
+        raw = [raw]
+    elif not isinstance(raw, list):
+        raw = []
+    out: list[str] = []
+    for t in raw:
+        if not str(t).strip():
+            continue
+        slug = slugify(t)
+        if slug not in out:
+            out.append(slug)
+    return out[:limit] if limit is not None else out
 
 
 def existing_tags() -> list[str]:
@@ -317,12 +340,26 @@ async def transcribe(
     blocks.append({"type": "text", "text": tail})
 
     draft = extract_json(call_claude(blocks, SYSTEM_PROMPT, max_tokens=8000))
+    if not isinstance(draft, dict):
+        raise HTTPException(502, f"Model did not return a JSON object: {draft!r}")
 
-    draft.setdefault("title", "Untitled")
+    # The model's JSON is untrusted input past this point: coerce every field to
+    # the shape the rest of the app assumes so a malformed/odd response (a null
+    # title, a string instead of a tag list, etc.) can't crash or corrupt state.
+    title = draft.get("title")
+    title = str(title).strip() if title else "Untitled"
+    draft["title"] = title or "Untitled"
+
     draft["slug"] = slugify(draft.get("slug") or draft["title"])
-    draft.setdefault("description", "")
-    draft["tags"] = [slugify(str(t)) for t in (draft.get("tags") or [])][:6]
-    draft.setdefault("body", "")
+
+    desc = draft.get("description")
+    draft["description"] = str(desc).strip() if desc else ""
+
+    draft["tags"] = coerce_tags(draft.get("tags"), limit=6)
+
+    body = draft.get("body")
+    draft["body"] = str(body) if body else ""
+
     draft["date"] = dt.date.today().isoformat()
     return JSONResponse(draft)
 
@@ -353,7 +390,7 @@ async def publish(payload: dict) -> dict:
         raise HTTPException(400, f"Bad date '{date_str}'. Use YYYY-MM-DD.")
 
     slug = slugify(payload.get("slug") or title)
-    tags = [slugify(str(t)) for t in (payload.get("tags") or []) if str(t).strip()]
+    tags = coerce_tags(payload.get("tags"))
     desc = (payload.get("description") or "").strip()
 
     # Switch to the target branch BEFORE touching the filesystem, so the
@@ -383,8 +420,18 @@ async def publish(payload: dict) -> dict:
 
     result: dict[str, Any] = {"file": str(path.relative_to(REPO_ROOT))}
 
-    git("add", str(path.relative_to(REPO_ROOT)))
-    git("commit", "-m", f"post: {title}")
+    rel_path = str(path.relative_to(REPO_ROOT))
+    git("add", rel_path)
+    # --only restricts the commit to this path's changes even if other files are
+    # already staged in the index, so publishing a post can never sweep in
+    # unrelated work-in-progress from the same working tree. It does mean an
+    # empty diff is a hard error rather than a silent success on someone else's
+    # staged changes, so skip the commit outright when nothing changed.
+    if git("diff", "--cached", "--name-only", "--", rel_path):
+        git("commit", "--only", "-m", f"post: {title}", "--", rel_path)
+        result["committed"] = True
+    else:
+        result["committed"] = False
     result["commit"] = git("rev-parse", "--short", "HEAD")
     result["branch"] = branch
 

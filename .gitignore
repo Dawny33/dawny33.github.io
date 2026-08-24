@@ -4,6 +4,7 @@ _site/
 .jekyll-metadata
 vendor/
 .bundle/
+Gemfile.lock
 
 # notes2blog tool
 tools/notes2blog/.venv/

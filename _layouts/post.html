@@ -7,8 +7,11 @@ layout: default
     <div class="post-meta">
       <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %-d, %Y" }}</time>
       {% assign words = content | number_of_words %}
+      {%- comment -%} ceil(words / 220), with a floor of 1 so a short post never reads "0 min". {%- endcomment -%}
+      {% assign minutes = words | plus: 219 | divided_by: 220 %}
+      {% if minutes < 1 %}{% assign minutes = 1 %}{% endif %}
       <span class="dot">·</span>
-      <span>{{ words | divided_by: 220 | plus: 1 }} min read</span>
+      <span>{{ minutes }} min read</span>
     </div>
     {% if page.tags.size > 0 %}
     <div class="tag-list post-header-tags">

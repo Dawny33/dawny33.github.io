@@ -216,6 +216,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let files = [], tags = [], known = [], draft = null;
+let thumbUrls = [];
 
 /* ---------- status ---------- */
 fetch('/api/status').then(r=>r.json()).then(s=>{
@@ -245,9 +246,14 @@ function add(list) {
 }
 function drawThumbs() {
   const t = $('#thumbs'); t.innerHTML = '';
+  thumbUrls.forEach(u => URL.revokeObjectURL(u));
+  thumbUrls = [];
   files.forEach((f, i) => {
     const d = document.createElement('div'); d.className = 'thumb';
-    const img = document.createElement('img'); img.src = URL.createObjectURL(f);
+    const img = document.createElement('img');
+    const url = URL.createObjectURL(f);
+    thumbUrls.push(url);
+    img.src = url;
     const n = document.createElement('div'); n.className = 'n'; n.textContent = i + 1;
     const x = document.createElement('button'); x.className = 'x'; x.textContent = '×';
     x.onclick = ev => { ev.stopPropagation(); files.splice(i, 1); drawThumbs(); };
@@ -317,11 +323,15 @@ $('#go').onclick = async () => {
     $('#body').value  = j.body || '';
     tags = j.tags || []; drawTags();
     $('#editor').classList.remove('hidden');
+    // Always reset first: a second transcription that comes back clean must not
+    // leave the previous draft's confidence warning on screen.
+    const note = $('#modelnote'); note.textContent = '';
     if (j.notes || (j.confidence && j.confidence !== 'high')) {
-      $('#modelnote').classList.remove('hidden');
-      const note = $('#modelnote'); note.textContent = '';
       const b = document.createElement('b'); b.textContent = `Confidence: ${j.confidence || 'n/a'}`;
       note.append(b, document.createElement('br'), document.createTextNode(j.notes || 'Nothing flagged.'));
+      note.classList.remove('hidden');
+    } else {
+      note.classList.add('hidden');
     }
     await refresh();
     $('#editor').scrollIntoView({behavior:'smooth'});
@@ -353,10 +363,26 @@ async function refresh() {
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})
     : '';
   drawPreviewTags();
-  const clean = window.DOMPurify
-    ? DOMPurify.sanitize(j.html, { FORBID_TAGS: ['script', 'style'], FORBID_ATTR: ['onerror','onload','onclick'] })
-    : j.html.replace(/<script[\s\S]*?<\/script>/gi, '');
-  $('#preview .body').innerHTML = clean;
+  const body_el = $('#preview .body');
+  if (window.DOMPurify) {
+    body_el.innerHTML = DOMPurify.sanitize(j.html, {
+      FORBID_TAGS: ['script', 'style'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick'],
+    });
+  } else {
+    // Sanitizer failed to load (e.g. offline, CDN blocked) — fail closed. The
+    // rendered HTML is model-generated and would run in this origin, which can
+    // reach the local publish API, so never insert it unsanitized. Show the
+    // markdown source as inert text instead.
+    body_el.textContent = '';
+    const warn = document.createElement('p');
+    warn.style.color = 'var(--err)';
+    warn.textContent = 'Preview sanitizer unavailable — showing the markdown source as plain text.';
+    const src = document.createElement('pre');
+    src.style.whiteSpace = 'pre-wrap';
+    src.textContent = body;
+    body_el.append(warn, src);
+  }
   $('#raw').textContent = body;
 }
 $('#refresh').onclick = refresh;

@@ -63,7 +63,10 @@ second. Open **http://127.0.0.1:8765** and:
    right position if you need to reorder).
 2. Optionally add a line of direction ("keep it short", "this follows the pipelines post").
 3. Hit **Read notes & draft post**. Takes 20-60s depending on page count.
-4. The draft appears on the left, rendered exactly as it will look on the right.
+4. The draft appears on the left, with an approximate rendered preview on the right
+   (the tool previews with Python-Markdown; the live site renders with Jekyll's
+   Kramdown/GFM, so formatting is close but not pixel-for-pixel identical — check
+   anything unusual, like tables or nested lists, once it's published).
    Edit anything — title, slug, date, description, tags, body. The preview updates as
    you type. The tool also flags anything it couldn't read clearly with a confidence
    note and `[?]` markers inline.
