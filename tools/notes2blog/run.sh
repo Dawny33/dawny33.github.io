@@ -10,7 +10,11 @@ if [ ! -f "$DEPS_MARKER" ]; then
   # .venv existing doesn't mean deps installed cleanly last time — a failed
   # install (network blip, disk full) still leaves the directory behind, so
   # gate on this marker (written only after a successful install) instead,
-  # and always retry the install when it's missing.
+  # and always retry the install when it's missing. A retry must also blow
+  # away any stale partial .venv from the failed attempt first: `uv venv` /
+  # `python -m venv` both refuse to create a venv where one already exists,
+  # which would otherwise leave the script permanently stuck failing.
+  rm -rf .venv
   echo "→ Setting up virtualenv…"
   if command -v uv >/dev/null 2>&1; then
     uv venv .venv >/dev/null
