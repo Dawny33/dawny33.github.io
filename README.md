@@ -59,7 +59,8 @@ second. Open **http://127.0.0.1:8765** and:
 
 1. **Drop in photos** of your notes — one or many. Multiple pages are treated as one
    continuous train of thought, in the order shown, so keep them in reading order
-   (drag to remove any that are out of place).
+   (use the × on a thumbnail to remove one that's out of place; re-add it in the
+   right position if you need to reorder).
 2. Optionally add a line of direction ("keep it short", "this follows the pipelines post").
 3. Hit **Read notes & draft post**. Takes 20-60s depending on page count.
 4. The draft appears on the left, rendered exactly as it will look on the right.
@@ -88,13 +89,19 @@ on the site rather than inventing near-duplicates.
 
 ## Local preview
 
-The system Ruby on macOS (2.6) is too old for current Jekyll. Either install a modern
-Ruby (`brew install ruby`) and use the `Gemfile`, or pin older gems:
+The system Ruby on macOS (2.6) is too old for current `github-pages`/Jekyll. The
+committed `Gemfile` is already pinned to older, Ruby 2.6-compatible gem versions
+(`jekyll ~> 3.9`, `ffi ~> 1.15.5`, `google-protobuf ~> 3.21.0`), so this works
+out of the box:
 
 ```bash
-bundle install
+bundle install --path vendor/bundle
 bundle exec jekyll serve
 ```
+
+If you upgrade to a modern Ruby (`brew install ruby` → 3.x), you can switch the
+Gemfile back to plain `gem "github-pages", group: :jekyll_plugins`, which tracks
+whatever Jekyll/plugin versions GitHub Pages actually runs in production.
 
 ## Layout
 

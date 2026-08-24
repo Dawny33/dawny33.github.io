@@ -3,6 +3,7 @@ uvicorn[standard]>=0.27
 python-multipart>=0.0.9
 httpx>=0.27
 Pillow>=10.2
+pillow-heif>=0.16
 PyYAML>=6.0
 Markdown>=3.5
 Pygments>=2.17

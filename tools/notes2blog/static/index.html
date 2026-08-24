@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>notes2blog</title>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <style>
   :root {
     --bg:#14140f; --panel:#1b1a15; --panel2:#211f19; --fg:#e8e6df; --muted:#9a978d;
@@ -219,9 +220,14 @@ let files = [], tags = [], known = [], draft = null;
 /* ---------- status ---------- */
 fetch('/api/status').then(r=>r.json()).then(s=>{
   known = s.known_tags || [];
-  $('#status').innerHTML =
-    `<b>${s.branch}</b>${s.auto_push?' · auto-push':' · commit only'} · `+
-    `${s.post_count} posts · key ${s.key_set?'<span style="color:var(--ok)">set</span>':'<span style="color:var(--err)">MISSING</span>'}`;
+  const box = $('#status'); box.textContent = '';
+  const b = document.createElement('b'); b.textContent = s.branch; box.append(b);
+  box.append(document.createTextNode(s.auto_push ? ' · auto-push' : ' · commit only'));
+  box.append(document.createTextNode(` · ${s.post_count} posts · key `));
+  const key = document.createElement('span');
+  key.style.color = s.key_set ? 'var(--ok)' : 'var(--err)';
+  key.textContent = s.key_set ? 'set' : 'MISSING';
+  box.append(key);
   renderSuggest();
 }).catch(()=>{ $('#status').textContent='status unavailable'; });
 
@@ -263,6 +269,7 @@ function drawTags() {
     c.append(b); box.insertBefore(c, input);
   });
   renderSuggest();
+  drawPreviewTags();
 }
 function renderSuggest() {
   const s = $('#suggest'); if (!s) return;
@@ -312,9 +319,9 @@ $('#go').onclick = async () => {
     $('#editor').classList.remove('hidden');
     if (j.notes || (j.confidence && j.confidence !== 'high')) {
       $('#modelnote').classList.remove('hidden');
-      $('#modelnote').innerHTML =
-        `<b>Confidence: ${j.confidence || 'n/a'}</b><br>${(j.notes||'Nothing flagged.')
-          .replace(/</g,'&lt;')}`;
+      const note = $('#modelnote'); note.textContent = '';
+      const b = document.createElement('b'); b.textContent = `Confidence: ${j.confidence || 'n/a'}`;
+      note.append(b, document.createElement('br'), document.createTextNode(j.notes || 'Nothing flagged.'));
     }
     await refresh();
     $('#editor').scrollIntoView({behavior:'smooth'});
@@ -327,6 +334,10 @@ $('#go').onclick = async () => {
 };
 
 /* ---------- preview ---------- */
+function drawPreviewTags() {
+  const pt = $('#preview .ptags'); pt.innerHTML = '';
+  tags.forEach(t => { const s = document.createElement('span'); s.textContent = t; pt.append(s); });
+}
 async function refresh() {
   const body = $('#body').value;
   const r = await fetch('/api/render', {
@@ -341,9 +352,11 @@ async function refresh() {
   $('#preview .meta').textContent = d
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})
     : '';
-  const pt = $('#preview .ptags'); pt.innerHTML = '';
-  tags.forEach(t => { const s = document.createElement('span'); s.textContent = t; pt.append(s); });
-  $('#preview .body').innerHTML = j.html;
+  drawPreviewTags();
+  const clean = window.DOMPurify
+    ? DOMPurify.sanitize(j.html, { FORBID_TAGS: ['script', 'style'], FORBID_ATTR: ['onerror','onload','onclick'] })
+    : j.html.replace(/<script[\s\S]*?<\/script>/gi, '');
+  $('#preview .body').innerHTML = clean;
   $('#raw').textContent = body;
 }
 $('#refresh').onclick = refresh;
@@ -367,10 +380,16 @@ document.querySelectorAll('.tabs button').forEach(b => {
 });
 
 /* ---------- publish ---------- */
-function show(kind, html) {
+function show(kind, text) {
   const m = $('#msg');
   m.className = 'msg show ' + kind;
-  m.innerHTML = html;
+  m.textContent = text;
+}
+function showNode(kind, node) {
+  const m = $('#msg');
+  m.className = 'msg show ' + kind;
+  m.textContent = '';
+  m.append(node);
 }
 $('#approve').onclick = async () => {
   if (!$('#title').value.trim()) return show('err', 'Add a title first.');
@@ -390,11 +409,22 @@ $('#approve').onclick = async () => {
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || 'Publish failed');
-    let msg = `<b>Published.</b><br>${j.file} · commit <code>${j.commit}</code> on <code>${j.branch}</code>`;
-    msg += j.pushed
-      ? `<br>Pushed. Live in a minute or two at <a href="${j.url}" target="_blank">${j.url}</a>`
-      : `<br>Committed locally — AUTO_PUSH is off, so push when you're ready.`;
-    show('ok', msg);
+
+    const frag = document.createElement('span');
+    const b = document.createElement('b'); b.textContent = 'Published.'; frag.append(b, document.createElement('br'));
+    frag.append(document.createTextNode(`${j.file} · commit `));
+    const commitCode = document.createElement('code'); commitCode.textContent = j.commit; frag.append(commitCode);
+    frag.append(document.createTextNode(' on '));
+    const branchCode = document.createElement('code'); branchCode.textContent = j.branch; frag.append(branchCode);
+    frag.append(document.createElement('br'));
+    if (j.pushed) {
+      frag.append(document.createTextNode('Pushed. Live in a minute or two at '));
+      const a = document.createElement('a'); a.href = j.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = j.url;
+      frag.append(a);
+    } else {
+      frag.append(document.createTextNode("Committed locally — AUTO_PUSH is off, so push when you're ready."));
+    }
+    showNode('ok', frag);
     btn.textContent = '✓ Published';
   } catch (e) {
     show('err', e.message);

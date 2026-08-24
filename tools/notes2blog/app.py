@@ -29,6 +29,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+except ImportError:  # pragma: no cover - degrade gracefully if not installed
+    pillow_heif = None
+
 # --------------------------------------------------------------------------
 # config
 # --------------------------------------------------------------------------
@@ -324,7 +331,7 @@ async def transcribe(
 async def render(payload: dict) -> dict:
     html = md.markdown(
         payload.get("body", ""),
-        extensions=["fenced_code", "codehilite", "tables", "sane_lists", "nl2br"],
+        extensions=["fenced_code", "codehilite", "tables", "sane_lists"],
         extension_configs={"codehilite": {"noclasses": False, "css_class": "highlight"}},
     )
     return {"html": html}
@@ -349,6 +356,13 @@ async def publish(payload: dict) -> dict:
     tags = [slugify(str(t)) for t in (payload.get("tags") or []) if str(t).strip()]
     desc = (payload.get("description") or "").strip()
 
+    # Switch to the target branch BEFORE touching the filesystem, so the
+    # overwrite check and the write itself both happen against the branch
+    # the post will actually land on.
+    branch = PUBLISH_BRANCH or git("rev-parse", "--abbrev-ref", "HEAD")
+    if PUBLISH_BRANCH and git("rev-parse", "--abbrev-ref", "HEAD") != PUBLISH_BRANCH:
+        git("checkout", PUBLISH_BRANCH)
+
     POSTS_DIR.mkdir(parents=True, exist_ok=True)
     path = POSTS_DIR / f"{date.isoformat()}-{slug}.md"
     if path.exists() and not payload.get("overwrite"):
@@ -368,10 +382,6 @@ async def publish(payload: dict) -> dict:
     path.write_text(f"---\n{fm}---\n\n{body}\n", encoding="utf-8")
 
     result: dict[str, Any] = {"file": str(path.relative_to(REPO_ROOT))}
-
-    branch = PUBLISH_BRANCH or git("rev-parse", "--abbrev-ref", "HEAD")
-    if PUBLISH_BRANCH and git("rev-parse", "--abbrev-ref", "HEAD") != PUBLISH_BRANCH:
-        git("checkout", PUBLISH_BRANCH)
 
     git("add", str(path.relative_to(REPO_ROOT)))
     git("commit", "-m", f"post: {title}")
