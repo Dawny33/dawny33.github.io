@@ -449,6 +449,34 @@ async def publish(payload: dict) -> dict:
     if PUBLISH_BRANCH and git("rev-parse", "--abbrev-ref", "HEAD") != PUBLISH_BRANCH:
         git("checkout", PUBLISH_BRANCH)
 
+    if AUTO_PUSH:
+        # `git push` sends every commit the local branch has that origin
+        # doesn't, not just the one this endpoint is about to make. If the
+        # user already has unrelated unpushed local work on this branch,
+        # auto-pushing would carry that out too - so refuse before writing
+        # anything unless local is already exactly in sync with origin.
+        # Fetching only this one ref (not the whole remote) keeps it fast.
+        try:
+            git("fetch", "origin", branch)
+            remote_head = git("rev-parse", f"origin/{branch}")
+        except HTTPException as e:
+            raise HTTPException(
+                409,
+                f"Could not verify origin/{branch} is in sync before publishing "
+                f"(fetch/rev-parse failed):\n{e.detail}\n\n"
+                "Refusing to auto-push. Push manually once, or set AUTO_PUSH=false.",
+            )
+        local_head = git("rev-parse", "HEAD")
+        if local_head != remote_head:
+            raise HTTPException(
+                409,
+                f"Local '{branch}' ({local_head[:7]}) has commits origin/{branch} "
+                f"({remote_head[:7]}) doesn't. AUTO_PUSH would push those too, not "
+                "just this post, so refusing to publish - push your existing local "
+                "work manually first, or set AUTO_PUSH=false and push everything "
+                "yourself when you're ready.",
+            )
+
     POSTS_DIR.mkdir(parents=True, exist_ok=True)
     path = POSTS_DIR / f"{date.isoformat()}-{slug}.md"
     if path.exists() and not payload.get("overwrite"):

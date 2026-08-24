@@ -4,9 +4,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PY="${PYTHON:-python3}"
+DEPS_MARKER=.venv/.deps-installed
 
-if [ ! -d .venv ]; then
-  echo "→ First run: creating virtualenv…"
+if [ ! -f "$DEPS_MARKER" ]; then
+  # .venv existing doesn't mean deps installed cleanly last time — a failed
+  # install (network blip, disk full) still leaves the directory behind, so
+  # gate on this marker (written only after a successful install) instead,
+  # and always retry the install when it's missing.
+  echo "→ Setting up virtualenv…"
   if command -v uv >/dev/null 2>&1; then
     uv venv .venv >/dev/null
     VENV_PY=.venv/bin/python
@@ -19,6 +24,7 @@ if [ ! -d .venv ]; then
     "$VENV_PY" -m pip install -q --upgrade pip
     "$VENV_PY" -m pip install -q -r requirements.txt
   fi
+  touch "$DEPS_MARKER"
 fi
 
 if [ ! -f .env ]; then
