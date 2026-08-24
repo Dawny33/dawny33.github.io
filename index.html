@@ -1,18 +1,28 @@
 ---
 layout: default
+title: null
 ---
 
-<div class="posts">
-  {% for post in site.posts %}
-    <article class="post">
+<section class="intro">
+  <h1>{{ site.name }}</h1>
+  <p>{{ site.tagline }}</p>
+  <div class="social-inline">
+    <a href="https://twitter.com/{{ site.social.twitter }}" target="_blank" rel="me noopener">Twitter</a>
+    <a href="https://www.linkedin.com/in/{{ site.social.linkedin }}" target="_blank" rel="me noopener">LinkedIn</a>
+    <a href="https://github.com/{{ site.social.github }}" target="_blank" rel="me noopener">GitHub</a>
+    <a href="{{ '/about/' | relative_url }}">About</a>
+  </div>
+</section>
 
-      <h1><a href="{{ site.baseurl }}{{ post.url }}">{{ post.title }}</a></h1>
+<h2 class="section-title">Recent posts</h2>
 
-      <div class="entry">
-        {{ post.excerpt }}
-      </div>
-
-      <a href="{{ site.baseurl }}{{ post.url }}" class="read-more">Read More</a>
-    </article>
+{% if site.posts.size == 0 %}
+  <p class="empty">No posts yet.</p>
+{% else %}
+  {% for post in site.posts limit: 8 %}
+    {% include post-list-item.html post=post %}
   {% endfor %}
-</div>
+  {% if site.posts.size > 8 %}
+    <p><a href="{{ '/blog/' | relative_url }}">All posts →</a></p>
+  {% endif %}
+{% endif %}

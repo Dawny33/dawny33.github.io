@@ -1,0 +1,15 @@
+---
+layout: default
+title: Blog
+permalink: /blog/
+---
+
+<h1 class="page-title">Blog</h1>
+
+{% if site.posts.size == 0 %}
+  <p class="empty">No posts yet.</p>
+{% else %}
+  {% for post in site.posts %}
+    {% include post-list-item.html post=post %}
+  {% endfor %}
+{% endif %}

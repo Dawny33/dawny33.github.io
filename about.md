@@ -4,18 +4,22 @@ title: About
 permalink: /about/
 ---
 
-Bio:
+I'm **Jalem Raj Rohit** — a data and machine learning engineer. I spend most of my time
+building data systems, training and shipping models, and trying to keep the pipeline
+between the two from falling over.
 
-I am Jalem Raj Rohit. I work as a Senior Consultant - Data Science and NLP at Episource.
-I am also the moderator of the [Devops site] (https://devops.stackexchange.com/) of StackOverflow
+This site is where I keep notes. Some of it is careful writing; a lot of it started as
+scribbles in a notebook that got photographed and turned into a post.
 
-I am currently responsible for all things Devops and backend infrastructure of the ML team. My area of interest lies in Recommender Systems, Distributed Systems and serverless computing.
+### Elsewhere
 
-I lives in Mumbai. 
+- **Twitter / X** — [@data__wizard](https://twitter.com/data__wizard)
+- **LinkedIn** — [/in/jalemrajrohit](https://www.linkedin.com/in/jalemrajrohit)
+- **GitHub** — [@Dawny33](https://github.com/Dawny33)
+- **Email** — [jrajrohit33@gmail.com](mailto:jrajrohit33@gmail.com)
 
+### About this site
 
-
-
-### Contact me
-
-[email](mailto:jrajrohit@iitj.ac.in)
+Built with Jekyll, hosted on GitHub Pages. Posts are tagged — browse them on the
+[tags page](/tags/). Many posts are drafted from handwritten notes using a small
+local tool that lives in `tools/notes2blog` in this repo.
